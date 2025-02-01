@@ -1,3 +1,4 @@
+using System.Collections;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -8,35 +9,43 @@ public class GameSceneUI : MonoBehaviour
 
     [Header("Main Menu")]
     [SerializeField]
-    private GameObject mainMenuGameObject;
-
-    [Header("Game Menu")]
+    private GameObject mainMenuGo;
     [SerializeField]
-    private GameObject gameMenuGameObject;
+    private Button connectHostButton;
+    [SerializeField]
+    private Button connectClientButton;
+    [SerializeField]
+    private TMP_Text connectionInfoText;
+
+    [Header("Game Frame")]
+    [SerializeField]
+    private GameObject gameFrameGo;
     [SerializeField]
     private TMP_Text playerScoreText;
     [SerializeField]
-    private TMP_Text botScoreText;
+    private TMP_Text opponentScoreText;
     [SerializeField]
-    private Button playCardRockButton;
+    private Button[] playCardButtons;
     [SerializeField]
-    private Button playCardPaperButton;
+    private GameObject playerHandGo;
     [SerializeField]
-    private Button playCardScissorsButton;
-    [SerializeField]
-    private GameObject playerHandGameObject;
-    [SerializeField]
-    private GameObject botHandGameObject;
+    private GameObject opponentHandGo;
 
-    [Header("Result Menu")]
+    [Header("Result Popup")]
     [SerializeField]
-    private GameObject resultMenuGameObject;
+    private GameObject resultPopupGo;
     [SerializeField]
-    private GameObject resultMenuHeaderWinGameObject;
+    private GameObject resultHeaderWinGo;
     [SerializeField]
-    private GameObject resultMenuHeaderLoseGameObject;
+    private GameObject resultHeaderLoseGo;
     [SerializeField]
-    private TMP_Text resultMenuScoreText;
+    private TMP_Text resultScoreText;
+    [SerializeField]
+    private Image resultPlayerInfoImage;
+    [SerializeField]
+    private Image resultOpponentInfoImage;
+    [SerializeField]
+    private Sprite[] resultPlayersInfoSprites;
 
     private void Awake()
     {
@@ -53,112 +62,111 @@ public class GameSceneUI : MonoBehaviour
         }
     }
 
-    #region Main Menu
-
-    public void ShowMainMenu()
+    public void ShowConnectionInfo(bool isHost)
     {
-        mainMenuGameObject.SetActive(true);
+        connectionInfoText.text = isHost ? "Connected as Host, wait for client" : "Connected as client, wait to start";
+        connectionInfoText.gameObject.SetActive(true);
+
+        connectHostButton.interactable = false;
+        connectClientButton.interactable = false;
     }
 
-    public void StartButtonClicked()
-    {
-        mainMenuGameObject.SetActive(false);
-        GameManager.instance.StartGame();
-    }
-
-    #endregion
-
-    #region Game Menu
-
+    /// <summary>
+    /// Initialize to start game, switch to game state in canvas
+    /// </summary>
     public void InitStartGame()
     {
-        resultMenuGameObject.SetActive(false);
-        playerHandGameObject.SetActive(false);
-        botHandGameObject.SetActive(false);
-        
-        gameMenuGameObject.SetActive(true);
+        SetScores(0, 0);
+        EnablePlayCards();
+        HandsView(false);
+        mainMenuGo.SetActive(false);
+        gameFrameGo.SetActive(true);
     }
 
-    #endregion
-
-    #region PlayCards
-
-    public void EnablePlayCards()
+    private void HandsView(bool isView)
     {
-        playCardRockButton.interactable = true;
-        playCardPaperButton.interactable = true;
-        playCardScissorsButton.interactable = true;
+        playerHandGo.SetActive(isView);
+        opponentHandGo.SetActive(isView);
     }
 
-    public void DisablePlayCards()
+    private void SetScores(int playerScore, int opponentScore)
     {
-        playCardRockButton.interactable = false;
-        playCardPaperButton.interactable = false;
-        playCardScissorsButton.interactable = false;
+        playerScoreText.text = playerScore.ToString();
+        opponentScoreText.text = opponentScore.ToString();
     }
 
-    public void PlayCardRockClicked()
+    private void EnablePlayCards()
     {
-        GameManager.instance.PlayerPlayedCard(PlayCardsEnum.Rock);
+        foreach (Button playCardButton in playCardButtons)
+        {
+            playCardButton.interactable = true;
+        }
     }
 
-    public void PlayCardPaperClicked()
+    private void DisablePlayCards()
     {
-        GameManager.instance.PlayerPlayedCard(PlayCardsEnum.Paper);
+        foreach (Button playCardButton in playCardButtons)
+        {
+            playCardButton.interactable = false;
+        }
     }
 
-    public void PlayCardScissorsClicked()
+    public void OnPlayCardButtonClicked(int playCard)
     {
-        GameManager.instance.PlayerPlayedCard(PlayCardsEnum.Scissors);
+        GameManager.instance.PlayerPlayedCard((PlayCardsEnum)playCard);
+        DisablePlayCards();
     }
 
-    #endregion
-
-    #region Scoreboard
-
-    public void SetPlayerScore(int score)
+    /// <summary>
+    /// Play round by given data from game manager, then update scoreboard and show the win frame if game ends
+    /// </summary>
+    /// <param name="playerPlayedCard">player's card choice</param>
+    /// <param name="playerScore">player's score after this round</param>
+    /// <param name="opponentPlayedCard">opponent's card choice</param>
+    /// <param name="opponentScore">opponent's score after this round</param>
+    /// <param name="isWin">is game ends after this round</param>
+    public void PlayRound(PlayCardsEnum playerPlayedCard, int playerScore, PlayCardsEnum opponentPlayedCard,
+        int opponentScore, bool isWin)
     {
-        playerScoreText.text = score.ToString();
-
+        StartCoroutine(PlayRoundCoroutine(playerPlayedCard, playerScore, opponentPlayedCard, opponentScore, isWin));
     }
 
-    public void SetBotScore(int score)
+    // wait until showing animations, then update scores
+    private IEnumerator PlayRoundCoroutine(PlayCardsEnum playerPlayedCard, int playerScore,
+        PlayCardsEnum opponentPlayedCard, int opponentScore, bool isWin)
     {
-        botScoreText.text = score.ToString();
+        AnimationManager.instance.PlayHandsAnimations(playerPlayedCard, opponentPlayedCard);
+        yield return new WaitForSeconds(1f);
+        SetScores(playerScore, opponentScore);
+
+        if (isWin)
+        {
+            ShowResultMenu(playerScore, opponentScore);
+        }
+        else
+        {
+            EnablePlayCards();
+        }
     }
-    #endregion
 
-    #region Result Menu
-
-    public void ShowResultMenu(bool isWin, int playerScore, int botScore)
+    private void ShowResultMenu(int playerScore, int opponentScore)
     {
-        playerHandGameObject.SetActive(false);
-        botHandGameObject.SetActive(false);
+        bool isPlayerWin = playerScore > opponentScore;
 
-        resultMenuHeaderWinGameObject.SetActive(isWin);
-        resultMenuHeaderLoseGameObject.SetActive(!isWin);
+        playerHandGo.SetActive(false);
+        opponentHandGo.SetActive(false);
 
-        resultMenuScoreText.text = playerScore + " - " + botScore;
+        resultHeaderWinGo.SetActive(isPlayerWin);
+        resultHeaderLoseGo.SetActive(!isPlayerWin);
 
-        resultMenuGameObject.SetActive(true);
+        resultScoreText.text = playerScore + " - " + opponentScore;
+        resultPlayerInfoImage.sprite = NetworkGameManager.Instance._isHost
+            ? resultPlayersInfoSprites[0]
+            : resultPlayersInfoSprites[1];
+        resultOpponentInfoImage.sprite = NetworkGameManager.Instance._isHost
+            ? resultPlayersInfoSprites[1]
+            : resultPlayersInfoSprites[0];
+
+        resultPopupGo.SetActive(true);
     }
-
-    public void CancelButtonClicked()
-    {
-        resultMenuGameObject.SetActive(false);
-
-        playerHandGameObject.SetActive(true);
-        botHandGameObject.SetActive(true);
-
-        gameMenuGameObject.SetActive(false);
-        ShowMainMenu();
-    }
-
-    public void PlayAgainButtonClicked()
-    {
-        resultMenuGameObject.SetActive(false);
-        GameManager.instance.StartGame();
-    }
-
-    #endregion
 }

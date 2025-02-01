@@ -33,11 +33,17 @@ public class AnimationManager : MonoBehaviour
         }
     }
 
+    public void PlayHandsAnimations(PlayCardsEnum playerChoice, PlayCardsEnum opponentChoice)
+    {
+        PlayerHandPlay(playerChoice);
+        OpponentHandPlay(opponentChoice);
+    }
+
     /// <summary>
     /// Playing animation of player's hand
     /// </summary>
     /// <param name="playCardsEnum">player's card choice</param>
-    public void PlayerHandPlay(PlayCardsEnum playCardsEnum)
+    private void PlayerHandPlay(PlayCardsEnum playCardsEnum)
     {
         string animState = GetAnimState(playCardsEnum);
 
@@ -52,25 +58,21 @@ public class AnimationManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Playing animation of bot's hand
+    /// Playing animation of opponents hand
     /// </summary>
-    /// <param name="playCardsEnum">bot's card choice</param>
-    public void BotHandPlay(PlayCardsEnum playCardsEnum)
+    /// <param name="playCardsEnum">opponent's card choice</param>
+    private void OpponentHandPlay(PlayCardsEnum playCardsEnum)
     {
         string animState = GetAnimState(playCardsEnum);
 
         //float endValue = playCardsEnum == PlayCardsEnum.Rock ? 120 : 175;
         float endValue = 175;
-        Debug.Log("AAAA:" + animState);
 
         botHandAnimator.Play(animState, 0, 0f);
         botHandGameObject.SetActive(true);
         botHandGameObject.transform.localPosition =
             new Vector3(botHandGameObject.transform.localPosition.x, 800);
-        botHandGameObject.transform.DOLocalMoveY(endValue, 1f).OnComplete(() =>
-        {
-            GameManager.instance.RoundPlayed();
-        });
+        botHandGameObject.transform.DOLocalMoveY(endValue, 1f);
     }
 
     #region Animation State

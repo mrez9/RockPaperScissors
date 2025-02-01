@@ -1,12 +1,14 @@
+using FishNet.Connection;
 using UnityEngine;
-using Random = UnityEngine.Random;
+using FishNet.Object;
 
-public class GameManager : MonoBehaviour
+public class GameManager : NetworkBehaviour
 {
     public static GameManager instance;
 
-    private int playerScore, botScore;
-    private PlayCardsEnum playerPlayedCard, botPlayedCard;
+    private int player1Score, player2Score;
+    private PlayCardsEnum player1PlayedCard, player2PlayedCard;
+    private bool player1Played, player2Played;
 
     private void Awake()
     {
@@ -29,57 +31,79 @@ public class GameManager : MonoBehaviour
     public void StartGame()
     {
         ResetGame();
+        RPCInitGame();
+    }
+
+    [ObserversRpc]
+    private void RPCInitGame()
+    {
         GameSceneUI.instance.InitStartGame();
     }
 
     /// <summary>
     /// Player's card choice to play
     /// </summary>
-    /// <param name="playCardsEnum">player's choice</param>
-    public void PlayerPlayedCard(PlayCardsEnum playCardsEnum)
+    /// <param name="playedCard">player's choice</param>
+    public void PlayerPlayedCard(PlayCardsEnum playedCard)
     {
-        playerPlayedCard = playCardsEnum;
-        GameSceneUI.instance.DisablePlayCards();
-        AnimationManager.instance.PlayerHandPlay(playCardsEnum);
-        PlayBotRandomCard();
+        RPCPlayerPlayedCard(playedCard);
     }
 
-    /// <summary>
-    /// Playing a random choice for bot
-    /// </summary>
-    private void PlayBotRandomCard()
+    [ServerRpc(RequireOwnership = false)]
+    private void RPCPlayerPlayedCard(PlayCardsEnum playedCard, NetworkConnection conn = null)
     {
-        PlayCardsEnum botPlayCard = (PlayCardsEnum)Random.Range(0, 3);
-        botPlayedCard = botPlayCard;
-        AnimationManager.instance.BotHandPlay(botPlayCard);
+        if (conn.ClientId == 0)
+        {
+            player1PlayedCard = playedCard;
+            player1Played = true;
+            Debug.Log($"player1 played :{playedCard}");
+        }
+        else
+        {
+            player2PlayedCard = playedCard;
+            player2Played = true;
+            Debug.Log($"player2 played :{playedCard}");
+        }
+
+        if (player1Played && player2Played)
+        {
+            RoundPlayed();
+        }
     }
 
     /// <summary>
     /// Get result of played round and reset variables 
     /// </summary>
-    public void RoundPlayed()
+    private void RoundPlayed()
     {
-        int result = GetRoundResult(playerPlayedCard, botPlayedCard);
+        int result = GetRoundResult(player1PlayedCard, player2PlayedCard);
         if (result == 1)
         {
-            playerScore++;
-            GameSceneUI.instance.SetPlayerScore(playerScore);
+            player1Score++;
         }
-        else if (result == -1)
+        else if (result == 2)
         {
-            botScore++;
-            GameSceneUI.instance.SetBotScore(botScore);
+            player2Score++;
         }
 
-        //checking game ends
-        if (playerScore == 5 || botScore == 5)
+        bool isWin = player1Score == 5 || player2Score == 5;
+
+        RPCSendRound(player1PlayedCard, player2PlayedCard, player1Score, player2Score, isWin);
+        player1Played = false;
+        player2Played = false;
+    }
+
+    [ObserversRpc]
+    private void RPCSendRound(PlayCardsEnum p1PlayedCard, PlayCardsEnum p2PlayedCard, int p1Score, int p2Score,
+        bool isWin)
+    {
+        if (NetworkGameManager.Instance._isHost)
         {
-            bool isWin = playerScore == 5;
-            GameSceneUI.instance.ShowResultMenu(isWin, playerScore, botScore);
+            GameSceneUI.instance.PlayRound(p1PlayedCard, p1Score, p2PlayedCard, p2Score, isWin);
         }
         else
         {
-            GameSceneUI.instance.EnablePlayCards();
+            GameSceneUI.instance.PlayRound(p2PlayedCard, p2Score, p1PlayedCard, p1Score, isWin);
         }
     }
 
@@ -88,41 +112,35 @@ public class GameManager : MonoBehaviour
     /// </summary>
     private void ResetGame()
     {
-        playerScore = 0;
-        botScore = 0;
-        GameSceneUI.instance.SetPlayerScore(0);
-        GameSceneUI.instance.SetBotScore(0);
-        GameSceneUI.instance.EnablePlayCards();
+        player1Score = 0;
+        player2Score = 0;
     }
-
-    #region Result
 
     /// <summary>
     /// Calculate played round's result
     /// </summary>
-    /// <param name="playerCard">player's choice</param>
-    /// <param name="botCard">bot's choice</param>
-    /// <returns></returns>
-    private int GetRoundResult(PlayCardsEnum playerCard, PlayCardsEnum botCard)
+    /// <param name="player1Choice">player 1 choice card</param>
+    /// <param name="player2Choice">player 2 choice card</param>
+    /// <returns>player id of winner, zero for draw</returns>
+    private int GetRoundResult(PlayCardsEnum player1Choice, PlayCardsEnum player2Choice)
     {
-        if (playerCard == botCard)
+        if (player1Choice == player2Choice)
         {
             return 0;
         }
 
-        switch (playerCard)
+        switch (player1Choice)
         {
             case PlayCardsEnum.Rock:
-                return botCard == PlayCardsEnum.Scissors ? 1 : -1;
+                return player2Choice == PlayCardsEnum.Scissors ? 1 : 2;
             case PlayCardsEnum.Paper:
-                return botCard == PlayCardsEnum.Rock ? 1 : -1;
+                return player2Choice == PlayCardsEnum.Rock ? 1 : 2;
             case PlayCardsEnum.Scissors:
-                return botCard == PlayCardsEnum.Paper ? 1 : -1;
+                return player2Choice == PlayCardsEnum.Paper ? 1 : 2;
             default:
-                Debug.LogError($"Error in get result of round, playerCard:{playerCard}, botCard:{botCard}");
+                Debug.LogError(
+                    $"Error in get result of round, playerCard:{player1Choice}, opponentCard:{player2Choice}");
                 return 0;
         }
     }
-
-    #endregion
 }
